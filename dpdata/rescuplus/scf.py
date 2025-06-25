@@ -123,7 +123,7 @@ def get_frame(f):
         else:
             stress = None
 
-        data["atom_names"] = formula
+        data["atom_names"] = out
         data["atom_numbs"] = number
         data["atom_types"] = np.array([i for i in range(len(number)) for j in range(number[i])])
         data["cells"] = cell.reshape(1,3,3) * Bohr2Angstrom

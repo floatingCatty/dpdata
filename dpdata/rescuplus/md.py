@@ -40,7 +40,7 @@ def get_frame(f):
             out.append(sym)
 
     data = {
-        "atom_names": formula,
+        "atom_names": out,
         "atom_numbs": number,
         "atom_types": np.array([i for i in range(len(number)) for j in range(number[i])]),
         "cells": np.array([]),
