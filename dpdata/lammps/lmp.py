@@ -198,6 +198,58 @@ def from_system_data(system, f_idx=0):
     ret += "\n"
     natoms = sum(system["atom_numbs"])
     ntypes = len(system["atom_numbs"])
+
+    # operate on the cell and position if the cell is not lower triangular
+    if abs(system["cells"][f_idx][1][0]) > 1e-6 or abs(system["cells"][f_idx][2][0]) > 1e-6 or abs(system["cells"][f_idx][2][1]) > 1e-6:
+        import decimal as dec
+
+        # convert the cell to lower triangular form
+        cell = system["cells"][f_idx]
+        a, b, c = cell
+        an, bn, cn = [np.linalg.norm(v) for v in cell]
+        
+        alpha = np.arccos(np.dot(b, c)/(bn*cn))
+        beta  = np.arccos(np.dot(a, c)/(an*cn))
+        gamma = np.arccos(np.dot(a, b)/(an*bn))
+        
+        xhi = an
+        xyp = np.cos(gamma)*bn
+        yhi = np.sin(gamma)*bn
+        xzp = np.cos(beta)*cn
+        yzp = (bn*cn*np.cos(alpha) - xyp*xzp)/yhi
+        zhi = np.sqrt(cn**2 - xzp**2 - yzp**2)
+
+        car_prec = dec.Decimal('10.0') ** \
+            int(np.floor(np.log10(max((xhi,yhi,zhi))))-10)
+        dir_prec = dec.Decimal('10.0') ** (-10)
+        acc = float(car_prec)
+        eps = np.finfo(xhi).eps
+
+        
+        # For rotating positions from ase to lammps
+        Apre = np.array(((xhi, 0,   0),
+                         (xyp, yhi, 0),
+                         (xzp, yzp, zhi)))
+        R = np.dot(np.linalg.inv(cell), Apre)
+
+        def f2qdec(f):
+            return dec.Decimal(repr(f)).quantize(car_prec, dec.ROUND_DOWN)
+
+        def fold(vec, pvec, i):
+            p = pvec[i]
+            x = vec[i] + 0.5*p
+            n = (np.mod(x, p) - x)/p
+            return [float(f2qdec(a)) for a in (vec + n*pvec)]
+
+        Apre[1,:] = fold(Apre[1,:], Apre[0,:], 0)
+        Apre[2,:] = fold(Apre[2,:], Apre[1,:], 1)
+        Apre[2,:] = fold(Apre[2,:], Apre[0,:], 0)
+
+        # transfrom cell and positions
+        system["cells"][f_idx] = Apre
+        system["coords"][f_idx] = np.dot(system["coords"][f_idx], R)
+
+
     ret += "%d atoms\n" % natoms  # noqa: UP031
     ret += "%d atom types\n" % ntypes  # noqa: UP031
     ret += (ptr_float_fmt + " " + ptr_float_fmt + " xlo xhi\n") % (
